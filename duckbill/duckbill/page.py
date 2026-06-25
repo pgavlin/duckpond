@@ -333,7 +333,11 @@ const THEME = {
 // the breakpoint flips (see the matchMedia listener in init).
 const NARROW = window.matchMedia("(max-width: 720px)");
 function themeConfig() {
-  return NARROW.matches ? { ...THEME, legend: { ...THEME.legend, orient: "bottom" } } : THEME;
+  if (!NARROW.matches) return THEME;
+  // A bottom legend lays out in a single row unless given a column count, so it would clip
+  // off the edge. Wrap into as many columns as the viewport fits (~120px/entry), at least 2.
+  const columns = Math.max(2, Math.floor((window.innerWidth - 60) / 120));
+  return { ...THEME, legend: { ...THEME.legend, orient: "bottom", columns } };
 }
 
 // prevRows (when compare mode is on) overlays the previous window as a faded
