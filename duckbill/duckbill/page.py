@@ -344,7 +344,8 @@ function vlSpec(chart, rows, prevRows, height) {
         const x = chart.encoding && chart.encoding.x;
         if (x && x.type === "temporal" && x.field) {
           barUnit = barTimeUnit(rows, x.field);
-          if (barUnit) e = { ...e, x: { ...e.x, timeUnit: barUnit } };
+          if (barUnit) e = { ...e, x: { ...e.x, timeUnit: barUnit,
+                                        axis: { ...(e.x.axis || {}), ...barTimeAxis() } } };
         }
       } else {
         e = withTimeAxis(e, chart, rows);            // readable UTC date/time x-axis for scatter
@@ -459,6 +460,21 @@ function temporalXAxis(rows, field) {
     gridColor: { condition: { test: mid, value: "#c7ccd4" }, value: "#f1f3f5" },
     labelColor: { condition: { test: mid, value: "#374151" }, value: "#9ca3af" },
     labelFontWeight: { condition: { test: mid, value: 700 }, value: 400 },
+  };
+}
+
+// A readable axis for a temporal bar x. The bar's timeUnit makes x a band scale, so the
+// continuous temporalXAxis (tickCount/format on a linear scale) does not apply; instead
+// label the date at each UTC day boundary and leave intraday bands blank, with a day
+// gridline -- the same day-boundary emphasis the line charts get. Daily-or-coarser bars
+// already sit on midnight, so every band is labeled.
+function barTimeAxis() {
+  const mid = "utchours(datum.value)===0&&utcminutes(datum.value)===0";
+  return {
+    grid: true, gridDash: [2, 2],
+    gridColor: { condition: { test: mid, value: "#c7ccd4" }, value: "#f1f3f5" },
+    labelExpr: `(${mid})?utcFormat(datum.value,'%b %-d'):''`,
+    labelColor: "#374151", labelFontWeight: 700,
   };
 }
 
