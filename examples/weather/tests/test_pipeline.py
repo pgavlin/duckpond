@@ -83,12 +83,6 @@ def _air_payload(times, value):
     return {"hourly": {"time": list(times), "pm2_5": [value] * n, "ozone": [value] * n}}
 
 
-def _daylight_payload():
-    return {"results": {"sunrise": "2023-11-15T07:00:00+00:00",
-                        "sunset": "2023-11-15T17:30:00+00:00", "day_length": 37800},
-            "status": "OK"}
-
-
 BASE = 1699999200  # an exact hour
 
 
@@ -103,8 +97,6 @@ def _patch(monkeypatch, weather_data, air_data, now, pageviews_data=None, quake_
     quake_data = {"features": []} if quake_data is None else quake_data
 
     def fetch(url):
-        if "sunrise-sunset" in url:
-            return _daylight_payload()
         if "wikimedia.org" in url:
             return pageviews_data
         if "earthquake.usgs.gov" in url:
@@ -219,20 +211,49 @@ def test_pageviews_rows_parse():
     assert list(_rows("x", 0, {"items": [{"timestamp": "2023111500"}]})) == []  # no views key
 
 
-def test_daylight_row_parses_fixture():
+def test_solar_sun_times_matches_almanac():
     import datetime
-    from sources.daylight import _row
-    results = _load_fixture("sunrise_sample.json")["results"]
-    day = 1700006400  # 2023-11-15T00:00:00Z, the fixture's date
-    row = _row("Testville", day, results)
-    assert row is not None
-    assert row["date"] == day and row["city"] == "Testville"
-    assert row["day_length_s"] == 37800
-    expect_sunrise = int(datetime.datetime(2023, 11, 15, 7, 0, tzinfo=datetime.timezone.utc).timestamp())
-    assert row["sunrise"] == expect_sunrise
-    assert row["sunset"] - row["sunrise"] == 37800   # 10.5h day matches day_length
-    # missing sunrise/sunset -> no row (schema stays consistent)
-    assert _row("x", 0, {}) is None
+    from sources import _solar
+
+    def day_epoch(y: int, m: int, d: int) -> int:
+        return int(datetime.datetime(y, m, d, tzinfo=datetime.timezone.utc).timestamp())
+
+    def minutes(epoch: int) -> int:
+        t = datetime.datetime.fromtimestamp(epoch, datetime.timezone.utc)
+        return t.hour * 60 + t.minute
+
+    # London, summer solstice: almanac sunrise ~03:43 UTC, sunset ~20:21 UTC, day ~16h38m.
+    london = _solar.sun_times(51.51, -0.13, day_epoch(2026, 6, 21))
+    assert london is not None
+    rise, sett, length = london
+    assert abs(minutes(rise) - (3 * 60 + 43)) <= 2
+    assert abs(minutes(sett) - (20 * 60 + 21)) <= 2
+    assert abs(length - (16 * 3600 + 38 * 60)) <= 120
+    assert sett - rise == length
+
+    # New York, winter solstice: almanac sunrise ~12:16 UTC, day ~9h15m.
+    nyc = _solar.sun_times(40.71, -74.01, day_epoch(2026, 12, 21))
+    assert nyc is not None
+    rise, sett, length = nyc
+    assert abs(minutes(rise) - (12 * 60 + 16)) <= 2
+    assert abs(length - (9 * 3600 + 15 * 60)) <= 120
+
+    # Polar night: the sun never rises at the North Pole in December.
+    assert _solar.sun_times(89.9, 0.0, day_epoch(2026, 12, 21)) is None
+
+
+def test_daylight_produce_schema():
+    from sources import _http
+    from sources.daylight import produce
+    batches = list(produce({"daylight": _http._now() - 2 * 86400}))
+    assert len(batches) == 1
+    _table, rows = batches[0]
+    assert rows, "expected at least one daylight row"
+    for r in rows:
+        assert set(r) == {"date", "city", "sunrise", "sunset", "day_length_s"}
+        sunrise, sunset = r["sunrise"], r["sunset"]
+        assert isinstance(sunrise, int) and isinstance(sunset, int)
+        assert sunset > sunrise
 
 
 def test_quake_rows_parse():

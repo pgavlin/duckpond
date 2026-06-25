@@ -15,8 +15,8 @@ DuckDB/SQLite store, ducktail-built or not.
 ## End-to-end example
 
 [`examples/weather/`](examples/weather/) runs the whole pipeline over real, keyless
-public data from two providers: ducktail ingests Open-Meteo weather + air quality and
-sunrise-sunset.org daylight, joins them on city and hour, and duckbill dashboards it.
+public data: ducktail ingests Open-Meteo weather + air quality and computes daylight
+locally, joins them on city and hour, and duckbill dashboards it.
 
 The ingest side is plain Python. A source is a table spec plus a `produce` that fetches only
 what's new since the last run ([`sources/weather.py`](examples/weather/sources/weather.py)):

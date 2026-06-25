@@ -1,10 +1,9 @@
 # weather + air quality (duckpond end-to-end example)
 
-The full duckpond pipeline over real, keyless public data from two providers: **ducktail**
-ingests hourly weather and air quality from [Open-Meteo](https://open-meteo.com) and daily
-sunrise/sunset from [sunrise-sunset.org](https://sunrise-sunset.org) for a handful of cities,
-joins them on `(city, hour)` and `(city, date)`, and **duckbill** serves the result as a
-live dashboard.
+The full duckpond pipeline over real, keyless public data: **ducktail** ingests hourly
+weather and air quality from [Open-Meteo](https://open-meteo.com) and computes daily
+sunrise/sunset locally for a handful of cities, joins them on `(city, hour)` and
+`(city, date)`, and **duckbill** serves the result as a live dashboard.
 
 This directory is laid out as a real scaffolded ducktail investigation -- a verbatim
 copy of the harness (`ducktail.py`), `refresh.py`, `sources/`, and a duckbill `dash.py`.
@@ -34,20 +33,20 @@ A static, in-browser build of this dashboard is published to GitHub Pages by
 - `sources/cities.py` -- a static city dimension (`mode="replace"`).
 - `sources/weather.py`, `sources/air_quality.py` -- two `mode="merge"` Open-Meteo sources,
   each incremental by an hourly `ts` cursor with a 2h overlap.
-- `sources/daylight.py` -- a `mode="merge"` sunrise-sunset.org source (a second provider),
-  incremental by a daily `date` cursor.
+- `sources/daylight.py` -- a `mode="merge"` source that makes no HTTP requests at all: it
+  computes sunrise/sunset locally (`sources/_solar.py`), incremental by a daily `date` cursor.
 - `sources/pageviews.py` -- a `mode="merge"` Wikimedia pageviews source, daily per-city views
   by a `date` cursor.
 - `sources/earthquakes.py` -- a `mode="merge"` USGS source, recent quakes within 500km of each
   city, keyed `(city, event_id)` and incremental by event `time`.
-- `sources/_http.py`, `sources/_openmeteo.py` -- the shared keyless-GET helper and the
-  Open-Meteo response parser.
+- `sources/_http.py`, `sources/_openmeteo.py`, `sources/_solar.py` -- the shared keyless-GET
+  helper, the Open-Meteo response parser, and the local sunrise/sunset calculation.
 - `refresh.py` -- wires the sources and, post-load, joins them into `warehouse.city_hourly`
   (adding `day_length_s` and a derived `is_daylight` per hour).
 - `dash.py` -- the duckbill dashboard.
 
-No credentials are needed; Open-Meteo, sunrise-sunset.org, Wikimedia, and USGS are all keyless.
-`ADW_LOOKBACK_DAYS` narrows the window (default 7).
+No credentials are needed; Open-Meteo, Wikimedia, and USGS are all keyless, and daylight is
+computed offline. `ADW_LOOKBACK_DAYS` narrows the window (default 7).
 
 ## Troubleshooting
 
