@@ -1,9 +1,11 @@
 """Load a dashboard module from a file path.
 
 A dashboard is an ordinary Python file that defines, at module level:
-  - `charts`: list of chart dicts (required)
-  - `params`: list of param dicts (optional)
-  - `title`:  page title (optional)
+  - `charts`:  list of chart dicts (required)
+  - `params`:  list of param dicts (optional)
+  - `title`:   page title (optional)
+  - `markers`: list of marker dicts overlaid on time charts (optional)
+  - `readme`:  Markdown narrative shown in the About view (optional)
 
 It's plain Python, so the author can compute SQL, share fragments, and build the
 lists however they like -- only the resulting data matters.
@@ -11,6 +13,7 @@ lists however they like -- only the resulting data matters.
 
 import importlib.util
 import os
+import sys
 
 from .core import Dashboard
 
@@ -28,6 +31,9 @@ def load_dashboard(path: str) -> Dashboard:
     if spec is None or spec.loader is None:
         raise DashboardError(f"cannot load dashboard module from {path}")
     mod = importlib.util.module_from_spec(spec)
+    # Register before exec so dataclasses/pickle and anything that looks the defining
+    # module up by name resolve. A second load overwrites the first -- fine for a one-shot.
+    sys.modules[spec.name] = mod
     try:
         spec.loader.exec_module(mod)
     except Exception as e:

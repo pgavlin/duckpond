@@ -2,6 +2,7 @@
 and comments from information_schema. Serve-only. DSN: mysql://user:pw@host:3306/db
 """
 
+from contextlib import closing
 from typing import Any
 from urllib.parse import unquote, urlparse
 
@@ -51,8 +52,7 @@ class MySQLBackend(DBAPIBackend[DBAPIConnection]):
         return con  # type: ignore[no-any-return]
 
     def schema(self) -> Schema:
-        with self._pool.borrow() as con:
-            cur = con.cursor()
+        with self._pool.borrow() as con, closing(con.cursor()) as cur:
             cur.execute(SCHEMA_SQL, {"db": self._db})
             rows = cur.fetchall()
         out: Schema = {}
@@ -61,8 +61,7 @@ class MySQLBackend(DBAPIBackend[DBAPIConnection]):
         return out
 
     def docs(self) -> list[DocsTable]:
-        with self._pool.borrow() as con:
-            cur = con.cursor()
+        with self._pool.borrow() as con, closing(con.cursor()) as cur:
             cur.execute(DOCS_SQL, {"db": self._db})
             rows = cur.fetchall()
         tables: dict[str, DocsTable] = {}

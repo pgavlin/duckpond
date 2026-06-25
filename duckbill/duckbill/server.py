@@ -85,6 +85,7 @@ def make_handler(
                     "params": dashboard.param_meta(warehouse),
                     "charts": dashboard.chart_meta(warehouse.dialect),
                     "markers": dashboard.marker_meta(),
+                    "savable": True,            # the live server persists saved questions
                 })
 
             if u.path == "/markers":
@@ -125,7 +126,10 @@ def make_handler(
 
         def do_POST(self) -> None:
             u = urlparse(self.path)
-            length = int(self.headers.get("Content-Length", 0))
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+            except ValueError:                           # malformed header -> empty body, not a 500
+                length = 0
             body: dict[str, Any] = {}
             try:
                 body = json.loads(self.rfile.read(length) or b"{}")

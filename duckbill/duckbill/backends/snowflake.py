@@ -5,15 +5,20 @@ Connect read-only by using a role with only SELECT grants (Snowflake has no
 session read-only toggle).
 """
 
+from contextlib import closing
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .base import DBAPIBackend, DBAPIConnection, DocsTable, Schema
 
+# dlt bookkeeping tables/columns are hidden, matching DuckDB. UPPER() because Snowflake
+# stores unquoted identifiers folded to upper case (so _dlt_loads -> _DLT_LOADS).
 SCHEMA_SQL = """
 SELECT table_schema, table_name, column_name
 FROM information_schema.columns
-WHERE table_schema NOT IN ('INFORMATION_SCHEMA')
+WHERE table_schema <> 'INFORMATION_SCHEMA'
+  AND UPPER(table_name) NOT LIKE '\\_DLT%' ESCAPE '\\'
+  AND UPPER(column_name) NOT LIKE '\\_DLT%' ESCAPE '\\'
 ORDER BY table_schema, table_name, ordinal_position
 """
 
@@ -23,7 +28,9 @@ SELECT c.table_schema, c.table_name, c.column_name, c.data_type,
 FROM information_schema.columns c
 JOIN information_schema.tables t
   ON c.table_schema = t.table_schema AND c.table_name = t.table_name
-WHERE c.table_schema NOT IN ('INFORMATION_SCHEMA')
+WHERE c.table_schema <> 'INFORMATION_SCHEMA'
+  AND UPPER(c.table_name) NOT LIKE '\\_DLT%' ESCAPE '\\'
+  AND UPPER(c.column_name) NOT LIKE '\\_DLT%' ESCAPE '\\'
 ORDER BY c.table_schema, c.table_name, c.ordinal_position
 """
 
@@ -64,8 +71,7 @@ class SnowflakeBackend(DBAPIBackend[DBAPIConnection]):
         return con  # type: ignore[no-any-return]
 
     def schema(self) -> Schema:
-        with self._pool.borrow() as con:
-            cur = con.cursor()
+        with self._pool.borrow() as con, closing(con.cursor()) as cur:
             cur.execute(SCHEMA_SQL)
             rows = cur.fetchall()
         out: Schema = {}
@@ -74,8 +80,7 @@ class SnowflakeBackend(DBAPIBackend[DBAPIConnection]):
         return out
 
     def docs(self) -> list[DocsTable]:
-        with self._pool.borrow() as con:
-            cur = con.cursor()
+        with self._pool.borrow() as con, closing(con.cursor()) as cur:
             cur.execute(DOCS_SQL)
             rows = cur.fetchall()
         tables: dict[str, DocsTable] = {}

@@ -13,7 +13,7 @@ import queue
 import re
 import threading
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any, Generic, Protocol, TypeVar
@@ -26,6 +26,12 @@ Row = dict[str, object]
 Schema = dict[str, list[str]]
 # A table's docs: {"name", "comment", "columns": [{"name","type","comment"}]}.
 DocsTable = dict[str, Any]
+
+
+def quote_ident(name: str) -> str:
+    """Double-quote a SQL identifier so a reserved word or special character works as a name.
+    A dotted name (schema.table) is quoted part by part: warehouse.events -> "warehouse"."events"."""
+    return ".".join('"' + p.replace('"', '""') + '"' for p in name.split("."))
 
 
 class DBAPIConnection(Protocol):
@@ -45,6 +51,7 @@ class DBAPICursor(Protocol):
     def execute(self, sql: str, *args: Any) -> Any: ...
     def fetchall(self) -> Sequence[Sequence[Any]]: ...
     def fetchmany(self, size: int = ...) -> Sequence[Sequence[Any]]: ...
+    def close(self) -> None: ...
 
 
 # A pooled connection: bounded above by DBAPIConnection so the pool can close it.
@@ -281,16 +288,14 @@ class DBAPIBackend(Backend, Generic[ConnT]):
 
     def run(self, sql: str, args: Mapping[str, object]) -> tuple[list[str], list[Row]]:
         q, p = bind(sql, args, self.dialect, self.paramstyle)
-        with self._pool.borrow() as con:
-            cur = con.cursor()
+        with self._pool.borrow() as con, closing(con.cursor()) as cur:
             cur.execute(q, p) if p else cur.execute(q)
             cols = [d[0] for d in cur.description]
             rows = cur.fetchall()
         return cols, [dict(zip(cols, jsonable_row(r))) for r in rows]
 
     def query(self, sql: str, limit: int = 2000) -> tuple[list[str], list[Row], bool]:
-        with self._pool.borrow() as con:
-            cur = con.cursor()
+        with self._pool.borrow() as con, closing(con.cursor()) as cur:
             cur.execute(sql)
             cols = [d[0] for d in cur.description]
             rows = cur.fetchmany(limit + 1)

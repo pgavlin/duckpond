@@ -60,3 +60,6 @@ def test_quoted_table_name(tmp_path):
     be = SQLiteBackend(path)
     assert "main.o'clock" in be.schema()
     assert any(t["name"] == "main.o'clock" for t in be.docs())
+    # the bundler exports by the schema() key, so a name needing quotes must round-trip
+    data = be.export_parquet("main.o'clock")
+    assert data[:4] == b"PAR1" and data[-4:] == b"PAR1"

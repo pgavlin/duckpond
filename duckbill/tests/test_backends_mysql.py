@@ -23,6 +23,9 @@ class _FakeCursor:
     def fetchmany(self, n):
         return [(1,)][:n]
 
+    def close(self):
+        pass
+
 
 class _FakeConn:
     def __init__(self, sink):

@@ -178,6 +178,10 @@ PAGE = r"""<!doctype html>
     .ts .custom { margin-left: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; }
     .ts .custom input[type=datetime-local] { flex: 1 1 150px; min-width: 0; }
     .ask { grid-template-columns: 1fr; }
+    /* touch has no hover, so reveal the enlarge button; the modal and schema list fit the screen */
+    .card-expand { opacity: .55; }
+    .modal-panel { width: 96vw; height: 92vh; }
+    .ask-schema { max-height: 30vh; }
   }
   .about td.ty { color: #888; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
 </style>
@@ -193,6 +197,7 @@ PAGE = r"""<!doctype html>
 <script>
 const PARAMS = {};      // current bind values, by name (timespan -> start/end)
 let CHARTS = [], PARAMSPEC = [], TS = null;   // TS = the timespan param spec, if any
+let SAVABLE = true;                            // whether the backend persists saved questions (from /meta)
 let MARKERSPEC = [], MARKERS = {};            // overlay defs + their current rows, by id
 let WINDOW = { mode: "preset", preset: null }; // timespan UI state
 let COMPARE = false;                            // overlay/delta vs the previous window
@@ -632,7 +637,8 @@ function renderLeaderboard(host, rows, prevRows, chart) {
   if (!rows || !rows.length) { host.innerHTML = "<div class='err'>no rows</div>"; return; }
   const keys = Object.keys(rows[0]);
   const labelCol = keys.find((k) => !k.startsWith("_") && typeof rows[0][k] !== "number") || keys[0];
-  const valCol = keys.find((k) => typeof rows[0][k] === "number") || keys[1];
+  const valCol = keys.find((k) => typeof rows[0][k] === "number");
+  if (!valCol) { host.innerHTML = "<div class='err'>no numeric column</div>"; return; }
   const max = Math.max(1, ...rows.map((r) => Math.abs(Number(r[valCol]) || 0)));
   const drill = chart.drill;
   const prevBy = {};
@@ -669,7 +675,7 @@ async function loadChart(chart) {
   const host = document.getElementById("body-" + chart.id);
   try {
     const data = await DB.runChart(chart, PARAMS);
-    if (data.error) { host.innerHTML = `<div class='err'>${data.error}</div>`; return; }
+    if (data.error) { host.innerHTML = `<div class='err'>${esc(data.error)}</div>`; return; }
     const pw = chart.params.includes("start") ? prevWindowParams() : null;
     if (chart.type === "table") { renderTable(host, data.rows, chart); return; }
     if (chart.type === "metric") {                   // big-figure tiles + delta + sparkline
@@ -725,7 +731,7 @@ async function loadChart(chart) {
       });
     }
   } catch (e) {
-    host.innerHTML = `<div class='err'>${e}</div>`;
+    host.innerHTML = `<div class='err'>${esc(e)}</div>`;
   }
 }
 
@@ -778,8 +784,8 @@ function sectionCards(section) {
     let attr = "";
     if (c.span === "full") attr = ' style="grid-column:1/-1"';
     else if (c.span > 1) attr = ` data-span="${c.span}"`;
-    return `<div class="card"${attr}><button class="card-expand" data-id="${c.id}" title="enlarge">&#x26F6;</button>` +
-           `<h3>${c.title}</h3><div id="body-${c.id}"></div></div>`;
+    return `<div class="card"${attr}><button class="card-expand" data-id="${c.id}" title="enlarge" aria-label="enlarge chart">&#x26F6;</button>` +
+           `<h3>${esc(c.title)}</h3><div id="body-${c.id}"></div></div>`;
   }).join("");
   return `<section><h2 class="sec">${section}</h2><div class="cards">${cards}</div></section>`;
 }
@@ -834,7 +840,7 @@ async function openCard(chartId) {
     `<div class="modal-panel"><div class="modal-head"><h3>${esc(chart.title)}</h3>` +
     `<div class="modal-tabs"><button class="on" data-tab="chart">Chart</button><button data-tab="data">Data</button></div>` +
     `<button class="modal-ask" title="open this query in Ask">Open in Ask</button>` +
-    `<button class="modal-x" title="close">&times;</button></div>` +
+    `<button class="modal-x" title="close" aria-label="close">&times;</button></div>` +
     `<div class="modal-body" id="modal-body"></div></div>`;
   document.body.appendChild(m);
   const body = m.querySelector("#modal-body");
@@ -852,7 +858,7 @@ async function openCard(chartId) {
     rows = data.error ? { error: data.error } : data.rows;
     return rows;
   };
-  const fail = (r) => r && r.error ? (body.innerHTML = `<div class='err'>${r.error}</div>`, true) : false;
+  const fail = (r) => r && r.error ? (body.innerHTML = `<div class='err'>${esc(r.error)}</div>`, true) : false;
   const showChart = async () => {
     body.innerHTML = "loading&hellip;";
     const r = await ensureRows(); body.innerHTML = ""; if (fail(r)) return;
@@ -1078,7 +1084,7 @@ function renderVizBar() {
     (enc ? `<label>x <select id="vz-x">${opt(ASK.viz.x)}</select></label>` +
            `<label>y <select id="vz-y">${opt(ASK.viz.y)}</select></label>` +
            `<label>color <select id="vz-c">${opt(ASK.viz.color, "none")}</select></label>` : "");
-  const writable = DB.savable;
+  const writable = SAVABLE;
   const saved = (ASK.saved.length || writable ?
     `<label>Saved <select id="ask-saved"><option value="">&mdash; open &mdash;</option>` +
     ASK.saved.map((q) => `<option value="${esc(q.slug)}" ${q.slug === ASK.currentSlug ? "selected" : ""}>${esc(q.name)}</option>`).join("") +
@@ -1204,6 +1210,7 @@ async function init() {
   document.getElementById("title").textContent = meta.title;
   document.title = meta.title;
   PARAMSPEC = meta.params; CHARTS = meta.charts; MARKERSPEC = meta.markers || [];
+  SAVABLE = meta.savable !== false;                 // default to savable when meta omits it
   TS = PARAMSPEC.find((p) => p.control === "timespan") || null;
 
   for (const p of PARAMSPEC) {                       // seed PARAMS from defaults
@@ -1248,7 +1255,6 @@ async function init() {
 let DB;
 
 const ServerDB = {
-  savable: true,
   async meta() { return (await fetch("/meta")).json(); },
   async runChart(chart, params) { return (await fetch("/q?" + new URLSearchParams({ chart: chart.id, ...params }))).json(); },
   async runSpark(chart, params) { return (await fetch("/q?" + new URLSearchParams({ chart: chart.id, spark: "1", ...params }))).json(); },

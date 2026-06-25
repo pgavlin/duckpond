@@ -31,6 +31,9 @@ class _RecCursor:
     def fetchmany(self, n):
         return [(7,)][:n]
 
+    def close(self):
+        pass
+
 
 class _RecConn:
     def __init__(self, sink):

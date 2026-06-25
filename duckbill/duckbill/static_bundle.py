@@ -90,7 +90,10 @@ function coerce(specs, req) {
     if (p.control === "timespan") { /* start/end arrive in req */ }
     else if (p.name in (req || {})) {
       const t = p.type, v = req[p.name];
-      out[p.name] = t === "int" ? parseInt(v, 10) : t === "float" ? parseFloat(v) : v;
+      // Fall back to the raw value on a non-numeric input, matching the Python coerce's
+      // try/except -- a NaN would otherwise bind the literal `NaN` into the SQL.
+      const num = t === "int" ? parseInt(v, 10) : parseFloat(v);
+      out[p.name] = (t === "int" || t === "float") ? (Number.isNaN(num) ? v : num) : v;
     } else if ("default" in p) { out[p.name] = p.default; }
   }
   for (const k of ["start", "end"]) if (req && k in req) out[k] = req[k];
@@ -198,11 +201,10 @@ const byId = {};
 for (const c of STATIC.meta.charts) byId[c.id] = c;
 
 window.__duckbillDB__ = {
-  savable: false,
   async meta() {
     const charts = STATIC.meta.charts.map(c => { const { sql, spark, ...rest } = c; return { ...rest, spark: !!spark }; });
     const markers = (STATIC.meta.markers || []).map(m => { const { sql, ...rest } = m; return rest; });
-    return { title: STATIC.meta.title, params: STATIC.meta.params, charts, markers };
+    return { title: STATIC.meta.title, params: STATIC.meta.params, charts, markers, savable: false };
   },
   async runChart(chart, params) {
     const c = byId[chart.id]; if (!c || !c.sql) return { id: chart.id, rows: [] };

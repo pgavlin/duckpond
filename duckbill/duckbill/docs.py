@@ -17,7 +17,7 @@ def to_markdown(title: str, readme: str, tables: Sequence[DocsTable]) -> str:
     for t in tables:
         out.append(f"### `{t['name']}`")
         if t.get("comment"):
-            out += ["", t["comment"].strip()]
+            out += ["", t["comment"].strip().replace("\n", " ")]  # collapse to one Markdown block
         out += ["", "| column | type | description |", "| --- | --- | --- |"]
         for c in t["columns"]:
             desc = (c.get("comment") or "").replace("|", "\\|").replace("\n", " ")

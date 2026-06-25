@@ -480,6 +480,7 @@ class Handler(BaseHTTPRequestHandler):
                            for c in META["charts"]],
                 "markers": [{{k: v for k, v in m.items() if k != "sql"}}
                             for m in META["markers"]],
+                "savable": False,           # the bundle is read-only: saving is disabled
             }})
 
         if u.path == "/markers":
@@ -534,7 +535,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         u = urlparse(self.path)
-        length = int(self.headers.get("Content-Length", 0))
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+        except ValueError:                           # malformed header -> empty body, not a 500
+            length = 0
         body = {{}}
         try:
             body = json.loads(self.rfile.read(length) or b"{{}}")

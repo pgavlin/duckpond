@@ -2,12 +2,17 @@
 comments from information_schema plus obj_description/col_description. Serve-only.
 """
 
+from contextlib import closing
+
 from .base import DBAPIBackend, DBAPIConnection, DocsTable, Schema
 
+# dlt bookkeeping tables/columns (_dlt_loads, _dlt_id, ...) are hidden, matching DuckDB.
 SCHEMA_SQL = """
 SELECT table_schema, table_name, column_name
 FROM information_schema.columns
 WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
+  AND table_name NOT LIKE '\\_dlt%' ESCAPE '\\'
+  AND column_name NOT LIKE '\\_dlt%' ESCAPE '\\'
 ORDER BY table_schema, table_name, ordinal_position
 """
 
@@ -17,6 +22,8 @@ SELECT c.table_schema, c.table_name, c.column_name, c.data_type,
        obj_description(format('%I.%I', c.table_schema, c.table_name)::regclass) AS tbl_comment
 FROM information_schema.columns c
 WHERE c.table_schema NOT IN ('information_schema', 'pg_catalog')
+  AND c.table_name NOT LIKE '\\_dlt%' ESCAPE '\\'
+  AND c.column_name NOT LIKE '\\_dlt%' ESCAPE '\\'
 ORDER BY c.table_schema, c.table_name, c.ordinal_position
 """
 
@@ -41,8 +48,7 @@ class PostgresBackend(DBAPIBackend[DBAPIConnection]):
         return con  # type: ignore[no-any-return]
 
     def schema(self) -> Schema:
-        with self._pool.borrow() as con:
-            cur = con.cursor()
+        with self._pool.borrow() as con, closing(con.cursor()) as cur:
             cur.execute(SCHEMA_SQL)
             rows = cur.fetchall()
         out: Schema = {}
@@ -51,8 +57,7 @@ class PostgresBackend(DBAPIBackend[DBAPIConnection]):
         return out
 
     def docs(self) -> list[DocsTable]:
-        with self._pool.borrow() as con:
-            cur = con.cursor()
+        with self._pool.borrow() as con, closing(con.cursor()) as cur:
             cur.execute(DOCS_SQL)
             rows = cur.fetchall()
         tables: dict[str, DocsTable] = {}

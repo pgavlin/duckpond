@@ -11,7 +11,7 @@ from collections.abc import Mapping, Sequence
 
 import duckdb
 
-from .base import Backend, DocsTable, Row, Schema, bind, jsonable_row, parquet_codec
+from .base import Backend, DocsTable, Row, Schema, bind, jsonable_row, parquet_codec, quote_ident
 
 
 class DuckDBBackend(Backend):
@@ -54,7 +54,7 @@ class DuckDBBackend(Backend):
                 # which roughly halves the shipped data vs DuckDB's default snappy
                 # (379k-row `entries`: 161 MB -> 76 MB) and reads as fast or faster.
                 self._con.execute(
-                    f"COPY (SELECT {proj} FROM {qualified}) TO '{path}' "
+                    f"COPY (SELECT {proj} FROM {quote_ident(qualified)}) TO '{path}' "
                     f"(FORMAT parquet, ROW_GROUP_SIZE 1048576, COMPRESSION {codec})")
             with open(path, "rb") as f:
                 return f.read()

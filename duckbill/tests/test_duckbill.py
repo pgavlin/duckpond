@@ -190,6 +190,17 @@ def test_export_parquet(db_path):
     assert data[:4] == b"PAR1" and data[-4:] == b"PAR1"  # parquet magic
 
 
+def test_export_parquet_reserved_word_table(tmp_path):
+    # `order` is a reserved word; export must quote the qualified name, not just the columns.
+    path = str(tmp_path / "rw.duckdb")
+    con = duckdb.connect(path)
+    con.execute("CREATE SCHEMA warehouse")
+    con.execute('CREATE TABLE warehouse."order" AS SELECT 1 AS n')
+    con.close()
+    data = Warehouse(path).export_parquet("warehouse.order")
+    assert data[:4] == b"PAR1" and data[-4:] == b"PAR1"
+
+
 def test_build_bundle(db_path, tmp_path):
     import py_compile
     from duckbill import bundle

@@ -7,7 +7,7 @@ import sqlite3
 import tempfile
 from collections.abc import Sequence
 
-from .base import DBAPIBackend, DocsTable, Schema, parquet_codec
+from .base import DBAPIBackend, DocsTable, Schema, parquet_codec, quote_ident
 
 
 class SQLiteBackend(DBAPIBackend[sqlite3.Connection]):
@@ -68,7 +68,7 @@ class SQLiteBackend(DBAPIBackend[sqlite3.Connection]):
             with tempfile.TemporaryDirectory() as d:
                 out = os.path.join(d, "export.parquet")
                 con.execute(
-                    f"COPY (SELECT {proj} FROM s.{table}) TO '{out}' "
+                    f"COPY (SELECT {proj} FROM s.{quote_ident(table)}) TO '{out}' "
                     f"(FORMAT parquet, COMPRESSION {codec})")
                 with open(out, "rb") as f:
                     return f.read()

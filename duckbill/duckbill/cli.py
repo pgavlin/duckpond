@@ -64,7 +64,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         from .docs import to_markdown
         from .loader import load_dashboard
         dash = load_dashboard(args.dashboard)
-        md = to_markdown(dash.title, dash.readme, open_backend(args.db).docs())
+        be = open_backend(args.db)
+        try:
+            md = to_markdown(dash.title, dash.readme, be.docs())
+        finally:
+            be.close()
         if args.out:
             with open(args.out, "w") as f:
                 f.write(md)
