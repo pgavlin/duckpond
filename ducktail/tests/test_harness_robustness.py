@@ -56,6 +56,27 @@ def test_reserved_word_column_names_load_and_merge(tmp_path):
     con.close()
 
 
+def test_reserved_word_table_and_cursor_survive_reads_and_full_reload(tmp_path):
+    # The high-water-mark read and the --full DROP interpolate the table name and cursor column,
+    # so a reserved word there must be quoted too -- not only in the write path. `order` (table)
+    # and `by` (cursor) are both reserved.
+    con = duckdb.connect(str(tmp_path / "rw2.duckdb"))
+    order = ducktail.Table("order", "merge", primary_key=("id",), cursor="by")
+
+    def produce(starts):
+        since = starts["order"]                       # keyed by table name; the rewound cursor
+        yield order, [{"id": 1, "by": since + 1}, {"id": 2, "by": since + 2}]
+
+    src = ducktail.Source("s", [order], produce, parallel=False)
+    ducktail.run(con, [src])                          # run 1: table absent, no HW read yet
+    ducktail.run(con, [src])                          # run 2: SELECT max("by") FROM warehouse."order"
+    n = con.execute('SELECT count(*) FROM warehouse."order"').fetchone()[0]
+    assert n == 2                                     # id 1,2 upserted, no duplicates
+    ducktail.run(con, [src], full=True)               # --full: DROP TABLE warehouse."order"
+    assert con.execute('SELECT count(*) FROM warehouse."order"').fetchone()[0] == 2
+    con.close()
+
+
 def test_dependent_source_sees_prior_run_via_second_run(tmp_path):
     # The skill's pattern for a source that reads another's just-written rows: two run()
     # calls. run() returns only after the writer drains, so the second call's source sees

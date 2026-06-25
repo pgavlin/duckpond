@@ -112,7 +112,7 @@ def refresh(db_path: str) -> None:
 
 
 def selftest() -> bool:
-    """Prove the three incremental properties (merge, overlap, replace), credential-free."""
+    """Prove the three incremental properties (incremental, overlap, merge), credential-free."""
     import tempfile
 
     ok = True

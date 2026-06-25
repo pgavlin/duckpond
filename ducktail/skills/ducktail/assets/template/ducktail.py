@@ -18,7 +18,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from queue import Queue
-from typing import TypeAlias
+from typing import Literal, TypeAlias
 
 import duckdb
 import pyarrow as pa
@@ -57,7 +57,7 @@ class Table:
     with an overlap re-fetch; mode="replace" is rebuilt every run (a windowed aggregate with no
     time cursor)."""
     name: str
-    mode: str                          # "merge" | "replace"
+    mode: Literal["merge", "replace"]  # incremental upsert by cursor, or rebuilt every run
     primary_key: tuple[str, ...] = ()
     cursor: str | None = None          # merge: the incremental column
     overlap: int = 0                   # merge: re-fetch window, seconds
@@ -162,13 +162,14 @@ def run(con: duckdb.DuckDBPyConnection, sources: list[Source], *, full: bool = F
     if full:
         for s in sources:
             for t in s.tables:
-                con.execute(f"DROP TABLE IF EXISTS warehouse.{t.name}")
+                con.execute(f"DROP TABLE IF EXISTS warehouse.{_q(t.name)}")
 
     starts: dict[str, int] = {}
     for s in sources:
         for t in s.tables:
             if t.mode == "merge":
-                row = (con.execute(f"SELECT max({t.cursor}) FROM warehouse.{t.name}").fetchone()
+                assert t.cursor is not None  # a merge table is incremental on its cursor column
+                row = (con.execute(f"SELECT max({_q(t.cursor)}) FROM warehouse.{_q(t.name)}").fetchone()
                        if _exists(con, t.name) else None)
                 # max(cursor) over the cursor column (epoch seconds), or None on an empty/missing
                 # table. fetchone() is typed Any at the duckdb boundary; the cursor is an int.
@@ -208,7 +209,7 @@ def run(con: duckdb.DuckDBPyConnection, sources: list[Source], *, full: bool = F
     wt = threading.Thread(target=writer, daemon=True)
     wt.start()
     par = [s for s in sources if s.parallel] if PARALLEL else []
-    seq = [s for s in sources if s not in par]
+    seq = [s for s in sources if not (PARALLEL and s.parallel)]
     with ThreadPoolExecutor(max_workers=max(1, len(par)) if par else 1) as ex:
         futs: list[Future[None]] = [ex.submit(produce, s) for s in par]
         for s in seq:              # main-thread sources (anyio / one shared session), overlapping the pool
