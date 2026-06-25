@@ -64,7 +64,7 @@ PAGE = r"""<!doctype html>
   .crumb .pill b { font-weight: 600; }
   .crumb .pill .x { color: #999; text-decoration: none; font-size: 15px; line-height: 1; padding: 0 2px; }
   .crumb .pill .x:hover { color: #c0392b; }
-  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 16px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(460px, 100%), 1fr)); gap: 16px; }
   .card { position: relative; background: #fff; border: 1px solid #e3e5e8; border-radius: 8px; padding: 12px 14px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
   .card-expand { position: absolute; top: 7px; right: 7px; z-index: 2; border: 0; background: none; color: #aeb4bd; cursor: pointer; font-size: 14px; line-height: 1; padding: 3px 5px; border-radius: 5px; opacity: 0; transition: opacity .1s; }
   .card:hover .card-expand { opacity: 1; }
@@ -86,6 +86,9 @@ PAGE = r"""<!doctype html>
   .modal-body { flex: 1; overflow: auto; padding: 16px 18px; }
   .card h3 { font-size: 13px; margin: 0 0 8px; font-weight: 600; }
   .card > div { width: 100%; min-height: 60px; }
+  /* Let a vertical swipe scroll the page instead of being captured as a chart scrub/hover;
+     horizontal drags still reach Vega (e.g. the timespan brush). */
+  .vega-embed, .vega-embed svg, .vega-embed canvas { touch-action: pan-y; }
   .err { color: #b00020; font-size: 12px; white-space: pre-wrap; }
   /* hero metrics: a strip of big figures, one per result column */
   .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px 24px; min-height: 0; padding: 2px; }
@@ -165,6 +168,17 @@ PAGE = r"""<!doctype html>
   .about section.card { margin-bottom: 14px; }
   .about section.card h3 { margin: 0 0 6px; font-size: 14px; }
   .about .tc { color: #555; margin: 0 0 8px; }
+  /* Narrow screens: stack the header controls and let the wide datetime inputs shrink so the
+     toolbar wraps cleanly instead of overflowing. */
+  @media (max-width: 720px) {
+    header { padding: 10px 12px; gap: 10px; }
+    #controls { width: 100%; gap: 10px !important; }
+    #status { margin-left: 0; order: 99; font-size: 11px; }
+    .ts { flex-wrap: wrap; row-gap: 8px; }
+    .ts .custom { margin-left: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; }
+    .ts .custom input[type=datetime-local] { flex: 1 1 150px; min-width: 0; }
+    .ask { grid-template-columns: 1fr; }
+  }
   .about td.ty { color: #888; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
 </style>
 </head><body>
