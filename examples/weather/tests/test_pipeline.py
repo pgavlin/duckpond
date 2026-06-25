@@ -211,6 +211,24 @@ def test_pageviews_rows_parse():
     assert list(_rows("x", 0, {"items": [{"timestamp": "2023111500"}]})) == []  # no views key
 
 
+def test_pageviews_skips_failed_article(monkeypatch):
+    import urllib.error
+    from sources import _http
+    from sources import pageviews as pv
+
+    def fetch(url):
+        if "London" in url:
+            raise urllib.error.URLError("simulated 404")  # one article fails
+        return {"items": [{"timestamp": "2023111500", "views": 7}]}
+
+    monkeypatch.setattr(_http, "fetch_json", fetch)
+    monkeypatch.setattr(_http, "_now", lambda: pv._stamp_to_epoch("2023111600"))
+    (_table, rows), = pv.produce({"pageviews": pv._stamp_to_epoch("2023111500")})
+    cities = {r["city"] for r in rows}
+    assert "London" not in cities       # the failing article was skipped
+    assert "San Francisco" in cities    # the rest still produced rows
+
+
 def test_solar_sun_times_matches_almanac():
     import datetime
     from sources import _solar

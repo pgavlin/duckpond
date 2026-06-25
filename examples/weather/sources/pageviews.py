@@ -7,12 +7,16 @@ New York City, Sao Paulo -> the diacritic title), so each city carries its Wikip
 the diacritics live only in the request URL -- the warehouse stores the ASCII city.
 """
 import datetime
+import logging
+import urllib.error
 import urllib.parse
 from collections.abc import Iterator
 from typing import Any
 
 from ducktail import Batch, Source, Table, initial
 from sources import _http
+
+_log = logging.getLogger(__name__)
 
 URL = "https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article"
 PROJECT = "en.wikipedia.org/all-access/user"
@@ -78,7 +82,15 @@ def produce(starts: dict[str, int]) -> Iterator[tuple[Table, Batch]]:
     rows: list[dict[str, object]] = []
     for city, article in ARTICLES.items():
         art = urllib.parse.quote(article.replace(" ", "_"), safe="")
-        rows.extend(_rows(city, since, _http.fetch_json(f"{URL}/{PROJECT}/{art}/daily/{start_d}/{end_d}")))
+        # Tolerate a single article's failure -- the per-article endpoint 404s when a title
+        # has no data for the window, which is per-city and often persistent, so aborting the
+        # whole source would drop every city's views indefinitely. Skip it; keep the rest.
+        try:
+            data = _http.fetch_json(f"{URL}/{PROJECT}/{art}/daily/{start_d}/{end_d}")
+        except urllib.error.URLError as e:
+            _log.warning("pageviews: skipping %s (%s)", city, e)
+            continue
+        rows.extend(_rows(city, since, data))
     yield PAGEVIEWS, rows
 
 
