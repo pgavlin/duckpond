@@ -12,6 +12,9 @@ DuckDB/SQLite store, ducktail-built or not.
 
 ![A duckpond dashboard built by ducktail and served by duckbill: weather, air quality, daylight, Wikipedia pageviews, and earthquakes across several cities](assets/weather-hero.png)
 
+[See it live](https://pgavlin.github.io/duckpond/) -- a static, in-browser build of the
+example below, rebuilt daily on GitHub Pages.
+
 ## End-to-end example
 
 [`examples/weather/`](examples/weather/) runs the whole pipeline over real, keyless
