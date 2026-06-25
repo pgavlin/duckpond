@@ -1,0 +1,47 @@
+name: Pages
+on:
+  push:
+    branches: [main]
+    paths: ["examples/weather/**", "duckbill/**", ".github/workflows/pages.yml"]
+  schedule:
+    - cron: "17 6 * * *"   # daily; data is a rolling ~7-day window
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+      # Persist the warehouse across runs so the refresh is incremental, not a cold rebuild every
+      # time: faster, far less upstream API load (avoids rate limits), and -- crucially -- a
+      # transient source failure keeps that source's prior table instead of dropping its chart.
+      # The sources/dash hash busts the cache on a schema change; run_id saves a fresh snapshot.
+      - uses: actions/cache@v4
+        with:
+          path: examples/weather/weather.duckdb
+          key: weather-db-${{ hashFiles('examples/weather/sources/**', 'examples/weather/refresh.py', 'examples/weather/dash.py') }}-${{ github.run_id }}
+          restore-keys: |
+            weather-db-${{ hashFiles('examples/weather/sources/**', 'examples/weather/refresh.py', 'examples/weather/dash.py') }}-
+      - run: uv run refresh.py        # keyless sources -> no secrets; incremental over the cached db
+        working-directory: examples/weather
+      - run: pip install -e ./duckbill
+      - run: duckbill bundle examples/weather/dash.py --db examples/weather/weather.duckdb --static -o site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

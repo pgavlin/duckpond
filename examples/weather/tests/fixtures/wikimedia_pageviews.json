@@ -1,0 +1,5 @@
+{"items": [
+  {"project": "en.wikipedia", "article": "Testville", "granularity": "daily", "timestamp": "2023111500", "access": "all-access", "agent": "user", "views": 5400},
+  {"project": "en.wikipedia", "article": "Testville", "granularity": "daily", "timestamp": "2023111600", "access": "all-access", "agent": "user", "views": 6100},
+  {"project": "en.wikipedia", "article": "Testville", "granularity": "daily", "timestamp": "2023111700", "access": "all-access", "agent": "user", "views": 5800}
+]}

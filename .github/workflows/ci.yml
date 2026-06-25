@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  duckbill:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12", "3.13"]
+    defaults:
+      run:
+        working-directory: duckbill
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      # uv is needed for the standalone-bundle serve-integration test (uv run).
+      - run: pip install -e . pytest uv
+      - run: pytest -q
+
+  duckbill-typecheck:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: duckbill
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e . mypy
+      - run: mypy
+
+  ducktail:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12", "3.13"]
+    defaults:
+      run:
+        working-directory: ducktail
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -r requirements-dev.txt
+      - run: pytest -q
+
+  ducktail-typecheck:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ducktail
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # the deps carry the type info mypy checks against (duckdb, pyarrow ship py.typed).
+      - run: pip install -r requirements-dev.txt mypy
+      - run: mypy
+
+  example-weather:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12", "3.13"]
+    defaults:
+      run:
+        working-directory: examples/weather
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      # duckbill (editable) brings duckdb; pyarrow is the harness's bulk-load dep.
+      - run: pip install -e ../../duckbill pyarrow pytest
+      - run: pytest -q
+
+  example-weather-typecheck:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/weather
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install duckdb pyarrow mypy
+      - run: mypy

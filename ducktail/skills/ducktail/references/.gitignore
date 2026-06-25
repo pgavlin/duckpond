@@ -1,0 +1,4 @@
+.venv/
+.dlt_pipelines/
+*.duckdb
+__pycache__/

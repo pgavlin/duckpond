@@ -1,0 +1,48 @@
+name: Release duckbill
+
+# Tag the duckbill release as `duckbill-vX.Y.Z` (must match duckbill/pyproject.toml's
+# version). Publishes to PyPI via Trusted Publishing -- no stored token.
+on:
+  push:
+    tags: ["duckbill-v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read    # checkout (a job-level permissions block resets the rest to none)
+      id-token: write   # OIDC token for PyPI Trusted Publishing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Tag matches package version
+        working-directory: duckbill
+        run: |
+          tag="${GITHUB_REF_NAME#duckbill-v}"
+          proj="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          echo "tag=$tag  pyproject=$proj"
+          test "$tag" = "$proj" || { echo "::error::tag $GITHUB_REF_NAME != pyproject version $proj"; exit 1; }
+
+      - name: Test before publishing
+        working-directory: duckbill
+        run: |
+          pip install -e . pytest uv
+          pytest -q
+
+      - name: Build
+        working-directory: duckbill
+        run: |
+          pip install build
+          python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: duckbill/dist/

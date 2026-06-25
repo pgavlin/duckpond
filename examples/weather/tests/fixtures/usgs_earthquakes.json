@@ -1,0 +1,4 @@
+{"type": "FeatureCollection", "features": [
+  {"type": "Feature", "id": "us7000abcd", "properties": {"mag": 4.2, "place": "10km N of Testville", "time": 1700006400000}, "geometry": {"type": "Point", "coordinates": [-122.1, 37.3, 8.5]}},
+  {"type": "Feature", "id": "us7000efgh", "properties": {"mag": 2.8, "place": "5km S of Testville", "time": 1700009000000}, "geometry": {"type": "Point", "coordinates": [-121.9, 37.1, 12.0]}}
+]}

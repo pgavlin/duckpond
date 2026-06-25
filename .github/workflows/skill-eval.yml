@@ -1,0 +1,101 @@
+name: Skill eval (ducktail)
+
+# Layer-2 validation: run a real agent against the ducktail skill and assert it produces a
+# genuinely incremental pipeline. This is an LLM eval -- nondeterministic and token-costing --
+# so it does NOT gate PRs; it runs on demand and once a week to catch drift (model changes,
+# skill edits). The deterministic guarantees the skill depends on are covered by the ducktail
+# pytest suite on every PR; this job covers the "a fresh agent can build it from the skill" claim.
+#
+# Requires a repo secret ANTHROPIC_API_KEY. The agent step uses the Claude Code CLI in headless
+# (-p) mode; if the CLI's flags change, adjust the `claude -p ...` invocation below. The pass/fail
+# gate (.github/skill-eval/check_incremental.py) is deterministic and is the real signal.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 7 * * 1"        # 07:00 UTC every Monday
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ducktail-skill-eval
+  cancel-in-progress: false
+
+jobs:
+  skill-eval:
+    runs-on: ubuntu-latest
+    env:
+      # uv-managed Python may ship no CA bundle; point TLS at ubuntu's system store so the
+      # agent's `uv run refresh.py` (USGS over HTTPS) and the checker both work.
+      SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Require the API key
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          test -n "$ANTHROPIC_API_KEY" || { echo "::error::set the ANTHROPIC_API_KEY repo secret"; exit 1; }
+
+      - name: Build a fresh investigation from the skill
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          INV="$RUNNER_TEMP/investigation"
+          mkdir -p "$INV"
+          SKILL="$GITHUB_WORKSPACE/ducktail/skills/ducktail/SKILL.md"
+          PROMPT="The ducktail skill's SKILL.md is at: $SKILL
+          $(cat "$GITHUB_WORKSPACE/.github/skill-eval/task.md")"
+          cd "$INV"
+          # Headless run. --add-dir grants read access to the skill (cwd is the empty INV, which
+          # also keeps the agent away from the repo's examples). bypass perms: CI is sandboxed.
+          claude -p "$PROMPT" \
+            --model sonnet \
+            --add-dir "$GITHUB_WORKSPACE/ducktail/skills" \
+            --dangerously-skip-permissions
+          echo "INV=$INV" >> "$GITHUB_ENV"
+
+      - name: Assert the pipeline is genuinely incremental
+        run: uv run --with duckdb "$GITHUB_WORKSPACE/.github/skill-eval/check_incremental.py" "$INV"
+
+      - name: Discovery probe -- a natural request should trigger the skill
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          # Install ducktail as a PROJECT skill in a clean repo so the model must discover it from
+          # its description (no --add-dir, no naming it in the prompt). The prompt is a natural,
+          # higher-level request that once went to a generic process skill instead of ducktail.
+          #
+          # Two caveats this step is honest about:
+          #  - Skill selection is PROBABILISTIC; one run is not a verdict. We sample 5 times and
+          #    gate only on total breakage (0/5), which catches a regressed description without
+          #    flaking on inherent variance. The hit count is logged so a downward trend is visible.
+          #  - The runner has NO competing skills installed (no superpowers), so this measures
+          #    baseline discoverability, NOT head-to-head competition with a brainstorming-first
+          #    process skill. In a superpowers-equipped environment a high-level "build a project"
+          #    request may still go to brainstorming first -- a known limitation, not caught here.
+          PROBE="$RUNNER_TEMP/probe"
+          mkdir -p "$PROBE/.claude/skills"
+          cp -R "$GITHUB_WORKSPACE/ducktail/skills/ducktail" "$PROBE/.claude/skills/ducktail"
+          cd "$PROBE"
+          PROMPT="$(cat "$GITHUB_WORKSPACE/.github/skill-eval/discovery-prompt.txt")"
+          hits=0
+          for i in 1 2 3 4 5; do
+            out=$(claude -p "$PROMPT" --model sonnet --output-format stream-json --verbose --max-turns 2 2>/dev/null || true)
+            if echo "$out" | grep -q '"skill":"ducktail"'; then hits=$((hits+1)); echo "run $i: ducktail"; else echo "run $i: other"; fi
+          done
+          echo "ducktail triggered in $hits/5 runs"
+          test "$hits" -ge 1 || { echo "::error::ducktail never triggered (0/5) -- the description has regressed"; exit 1; }

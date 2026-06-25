@@ -1,0 +1,1 @@
+I want to create a local data warehouse + dashboard for world cup data. I'd like to be able to join across players, teams, managers, etc. data should be current and historical.

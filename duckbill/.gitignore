@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+examples/questions/
+examples/*.duckdb
+.vendor/
+# standalone bundles are regenerable build artifacts (duckbill bundle -> a single
+# uv-run .py); they embed the warehouse data and are too large to track.
+/dashboard.py

@@ -1,0 +1,53 @@
+[project]
+name = "duckbill"
+version = "0.1.1"
+description = "Live, query-backed dashboards over a local DuckDB, declared as Python data."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Pat Gavlin" }]
+dependencies = ["duckdb>=0.10", "pytz", "sqlglot>=20"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database :: Front-Ends",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3"]
+snowflake = ["snowflake-connector-python"]
+mysql = ["PyMySQL"]
+all = ["duckbill[postgres,snowflake,mysql]"]
+
+[project.scripts]
+duckbill = "duckbill.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/pgavlin/duckpond"
+Repository = "https://github.com/pgavlin/duckpond"
+Changelog = "https://github.com/pgavlin/duckpond/blob/main/duckbill/CHANGELOG.md"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["duckbill"]
+
+[tool.mypy]
+strict = true
+packages = ["duckbill"]
+
+# Optional network-backend drivers, imported lazily inside their modules. They
+# are not installed by default and don't ship type information, so mypy can't
+# resolve them; their use is confined to the matching backend module.
+[[tool.mypy.overrides]]
+module = ["psycopg", "pymysql", "snowflake.*"]
+ignore_missing_imports = true

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "duckpond",
+  "description": "Local-DuckDB toolkit -- the ducktail ingest skill.",
+  "owner": { "name": "Pat Gavlin" },
+  "plugins": [
+    {
+      "name": "ducktail",
+      "description": "Scaffold an ad-hoc local DuckDB warehouse from scattered sources with a small incremental harness, then serve it as a live dashboard.",
+      "source": "./ducktail",
+      "category": "database"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "ducktail",
+  "description": "Scaffold an ad-hoc local DuckDB warehouse from scattered sources with a small incremental harness, then serve it as a live dashboard.",
+  "version": "0.1.0",
+  "author": { "name": "Pat Gavlin" }
+}

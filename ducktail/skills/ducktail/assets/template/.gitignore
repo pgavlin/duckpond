@@ -1,0 +1,7 @@
+.venv/
+adw.duckdb
+.dlt_pipelines/
+__pycache__/
+*.html
+site/
+.env
