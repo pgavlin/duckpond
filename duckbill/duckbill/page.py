@@ -328,11 +328,19 @@ const THEME = {
                       "#7c3aed", "#0d9488", "#dc2626"] },
 };
 
+// On a narrow (phone) viewport, drop legends below the plot so the chart gets the full
+// width; on wider screens they keep their default spot on the right. Charts re-render when
+// the breakpoint flips (see the matchMedia listener in init).
+const NARROW = window.matchMedia("(max-width: 720px)");
+function themeConfig() {
+  return NARROW.matches ? { ...THEME, legend: { ...THEME.legend, orient: "bottom" } } : THEME;
+}
+
 // prevRows (when compare mode is on) overlays the previous window as a faded
 // second series on a single-series line/area chart.
 function vlSpec(chart, rows, prevRows, height) {
   const base = { data: { values: rows }, width: "container", height: height || 220,
-                 background: null, config: THEME };
+                 background: null, config: themeConfig() };
   let spec, barUnit = null;
   if (chart.spec) {                                  // raw Vega-Lite escape hatch
     spec = { ...base, ...chart.spec, data: { values: rows }, width: "container" };
@@ -1218,6 +1226,9 @@ async function init() {
   }
 
   window.addEventListener("hashchange", render);
+  // Re-render the visible charts when the narrow/wide breakpoint flips (e.g. phone rotation),
+  // so legends move between the right edge and below the plot.
+  NARROW.addEventListener("change", () => { if (VISIBLE.length) refresh(); });
   // delegate the per-card expand clicks (the grid is rebuilt each render)
   document.getElementById("grid").addEventListener("click", (e) => {
     const b = e.target.closest(".card-expand");
