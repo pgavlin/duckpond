@@ -8,6 +8,20 @@ def test_page_prefers_injected_db():
     assert "window.__duckbillDB__ || ServerDB" in PAGE
 
 
+def test_table_is_scrollable_and_resizable():
+    # Tables render inside a capped, scrollable viewport with a sticky header...
+    assert "<div class='table-scroll'>" in PAGE
+    assert ".table-scroll { overflow: auto; max-height:" in PAGE
+    assert ".table-scroll th { color: #666; font-weight: 600; white-space: nowrap; position: sticky; top: 0;" in PAGE
+    # ...and freeze their auto widths into a fixed layout so columns can be dragged...
+    assert "function freezeColumns(table)" in PAGE
+    assert 'table.style.tableLayout = "fixed"' in PAGE
+    assert 'grip.addEventListener("pointerdown"' in PAGE
+    # ...or double-clicked to fit their content.
+    assert "function autoFitColumn(table, i, col)" in PAGE
+    assert 'grip.addEventListener("dblclick"' in PAGE
+
+
 def test_pack_helpers_importable():
     # The static bundler reuses these; they must exist with the expected arity.
     # They're defined in server_bundle but imported via bundle to avoid circular imports.

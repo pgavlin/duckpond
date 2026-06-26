@@ -115,16 +115,22 @@ PAGE = r"""<!doctype html>
   /* compare toggle sits in the timespan control */
   .ts .cmp { margin-left: 6px; }
   .ts .step { padding: 3px 7px; }
-  /* table styling applies in cards and in the enlarge modal's Data view */
-  .card table, .modal-body table { border-collapse: collapse; width: 100%; font-size: 12px; table-layout: auto; }
-  .card th, .card td, .modal-body th, .modal-body td { text-align: left; padding: 3px 7px; border-bottom: 1px solid #eee; }
-  .card th, .modal-body th { color: #666; font-weight: 600; white-space: nowrap; }
+  /* renderTable wraps every table in .table-scroll: a capped, scrollable viewport
+     with a sticky header and drag-resizable columns. The 340px cap keeps a large
+     table from growing its card without bound; the modal and Ask views relax it. */
+  .table-scroll { overflow: auto; max-height: 340px; }
+  .table-scroll table { border-collapse: collapse; width: 100%; font-size: 12px; table-layout: auto; }
+  .table-scroll th, .table-scroll td { text-align: left; padding: 3px 7px; border-bottom: 1px solid #eee; }
+  .table-scroll th { color: #666; font-weight: 600; white-space: nowrap; position: sticky; top: 0; background: #fff; z-index: 1; }
   /* numeric columns hug their content; text columns absorb the rest and clip. */
-  .card td.num, .modal-body td.num { width: 1%; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
-  .card td:not(.num), .modal-body td:not(.num) { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .card td.link, .modal-body td.link { color: #3b6fb0; cursor: pointer; }
-  .card td.link:hover, .modal-body td.link:hover { text-decoration: underline; }
-  .card tbody tr:hover, .modal-body tbody tr:hover { background: #eef3f8; }
+  .table-scroll td.num { width: 1%; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+  .table-scroll td:not(.num) { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .table-scroll td.link { color: #3b6fb0; cursor: pointer; }
+  .table-scroll td.link:hover { text-decoration: underline; }
+  .table-scroll tbody tr:hover { background: #eef3f8; }
+  /* a thin grab handle on each header's right edge resizes the column */
+  .table-scroll .col-resize { position: absolute; top: 0; right: 0; width: 7px; height: 100%; cursor: col-resize; user-select: none; }
+  .table-scroll .col-resize:hover { background: #c9d3e2; }
   nav#nav { display: flex; gap: 4px; }
   nav#nav a { font-size: 13px; color: #bbb; text-decoration: none; padding: 4px 10px; border-radius: 6px; }
   nav#nav a.on { background: #3b6fb0; color: #fff; }
@@ -556,7 +562,8 @@ function renderTable(host, rows, chart) {
   if (!rows.length) { host.innerHTML = "<div class='err'>no rows</div>"; return; }
   const drill = (chart && chart.drill) || {};
   const cols = Object.keys(rows[0]).filter((c) => !c.startsWith("_"));
-  let h = "<table><thead><tr>" + cols.map((c) => `<th>${esc(c)}</th>`).join("") + "</tr></thead><tbody>";
+  let h = "<div class='table-scroll'><table><thead><tr>" +
+          cols.map((c) => `<th>${esc(c)}</th>`).join("") + "</tr></thead><tbody>";
   for (const r of rows) h += "<tr>" + cols.map((c) => {  // title reveals a clipped cell in full
     const d = drill[c];
     const value = d ? r[typeof d === "string" ? c : (d.value || c)] : null;
@@ -568,9 +575,79 @@ function renderTable(host, rows, chart) {
     }
     return `<td class="${cls}" title="${esc(r[c])}">${esc(r[c])}</td>`;
   }).join("") + "</tr>";
-  host.innerHTML = h + "</tbody></table>";
+  host.innerHTML = h + "</tbody></table></div>";
+  const scroll = host.querySelector(".table-scroll");
+  if (host.classList.contains("modal-body")) {     // the modal body already scrolls; let it own both axes
+    scroll.style.overflow = "visible"; scroll.style.maxHeight = "none";
+  } else if (host.id === "ask-result") {           // Ask results get more room than a dashboard card
+    scroll.style.maxHeight = "78vh";
+  }
+  freezeColumns(scroll.querySelector("table"));    // lock the auto widths, then allow drag-resize
   host.querySelectorAll("td.link").forEach((td) => td.addEventListener("click",
     () => { location.hash = td.dataset.p + "=" + encodeURIComponent(td.dataset.v); }));
+}
+
+// Freeze the auto-computed column widths into a <colgroup> and switch the table to
+// fixed layout, so the columns keep their natural sizes and can be dragged to resize.
+// Widening a column grows the table (and thus scrolls horizontally) rather than
+// squeezing its neighbors.
+function freezeColumns(table) {
+  const ths = Array.from(table.tHead.rows[0].cells);
+  const widths = ths.map((th) => th.getBoundingClientRect().width);
+  const cg = document.createElement("colgroup");
+  for (const w of widths) {
+    const col = document.createElement("col");
+    col.style.width = w + "px";
+    cg.appendChild(col);
+  }
+  table.insertBefore(cg, table.tHead);
+  table.style.tableLayout = "fixed";
+  // Exactly the sum of the frozen widths: no leftover for fixed layout to spread
+  // proportionally, so dragging one column moves only that column.
+  table.style.width = widths.reduce((a, b) => a + b, 0) + "px";
+  const cols = Array.from(cg.children);
+  ths.forEach((th, i) => {
+    const grip = document.createElement("span");
+    grip.className = "col-resize";
+    grip.addEventListener("pointerdown", (e) => startColResize(e, cols[i], table));
+    grip.addEventListener("dblclick", (e) => {       // fit the column to its content
+      e.preventDefault(); e.stopPropagation();
+      autoFitColumn(table, i, cols[i]);
+    });
+    th.appendChild(grip);
+  });
+}
+
+// Size a column to its widest cell. Collapsing the column first makes every cell
+// overflow, so scrollWidth reports the full (otherwise clipped) content width.
+function autoFitColumn(table, i, col) {
+  col.style.width = "1px";
+  let w = table.tHead.rows[0].cells[i].scrollWidth;
+  for (const row of table.tBodies[0].rows) w = Math.max(w, row.cells[i].scrollWidth);
+  col.style.width = Math.max(40, w + 2) + "px";
+  table.style.width = Array.from(table.querySelectorAll("col"))
+    .reduce((s, c) => s + parseFloat(c.style.width), 0) + "px";
+}
+
+// Drag a header grip to resize its column. The pointer is tracked on the document so
+// the drag survives leaving the header; the table width is recomputed each move so a
+// widened column shows up as horizontal scroll.
+function startColResize(e, col, table) {
+  e.preventDefault(); e.stopPropagation();
+  const startX = e.clientX, startW = parseFloat(col.style.width);
+  const move = (ev) => {
+    col.style.width = Math.max(40, startW + ev.clientX - startX) + "px";
+    table.style.width = Array.from(table.querySelectorAll("col"))
+      .reduce((s, c) => s + parseFloat(c.style.width), 0) + "px";
+  };
+  const up = () => {
+    document.removeEventListener("pointermove", move);
+    document.removeEventListener("pointerup", up);
+    document.body.style.cursor = "";
+  };
+  document.addEventListener("pointermove", move);
+  document.addEventListener("pointerup", up);
+  document.body.style.cursor = "col-resize";
 }
 
 // Compact number: 30225 -> "30.2k", 1.2e6 -> "1.2M", 77 -> "77". Lowercase k for
